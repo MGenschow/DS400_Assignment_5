@@ -1,30 +1,89 @@
 ---
-title: "Genschow_Malte_Assignment05"
+title: "Assignment 5"
 author: "Malte Genschow"
 date: "24 12 2021"
 output: html_document
 ---
+#### Code of Conduct
+You will only successfully complete this assignment if you adhere to the following rules and guidelines. You
+are allowed to work in groups, however,
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+* the work submitted must be yours.
+* the code must be your own.
+* you must make clear whom you worked with.
+
+**By submitting this assignment I agree to the above mentioned terms.**
+
+### General Setup:
+
+##### Clear Workspace
+```{r, }
+rm(list = ls())
 ```
 
-## R Markdown
+### 1. GitHub
+The code for this assignment can be found in [this repository](https://github.com/MGenschow/DS400_Assignment_5). Note that this is a **private** repository and access has been granted to David Gremminger (username davidgremminger).
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+### 2. Getting to know the API
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+* The rate limits for the [Ticketmaster Discovery API](https://developer.ticketmaster.com/products-and-docs/apis/getting-started/) is 5000 API calls per day and rate limitation of 5 requests per second. 
 
-```{r cars}
-summary(cars)
+* An API key has been obtained from the [API Explorer](https://developer.ticketmaster.com/api-explorer/v2/) and saved in a separate document. This document was added to the.gitignore file such that the secret key is not shared on Github. This key is sourced in the following code:
+
+```{r}
+source('ticketmaster_secret_key.R')
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+### 3. Basic Interacting with the API
+##### Load the required packages
+```{r, results = 'hide', warning=FALSE, message=FALSE}
+library(httr)
+library(jsonlite)
+library(dplyr)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+##### Create Endpoint URL 
+```{r}
+country_code = 'DE'
+url = paste('https://app.ticketmaster.com/discovery/v2/venues?apikey=', key, '&locale=*&countryCode=' , country_code, sep='')
+url
+```
+
+##### Get content from API and inspect
+```{r}
+response = GET(url)
+content = content(response)
+```
+The resulting list of three contains all the information for 20 venues obtained from the API. This list of lists contains the information about the venue in the first entry _embedded_ -> _venues_. In each of the 20 entries, one can find the name, city, postalCode, address, url, longitude, latitude and many more. The second entry ( _links_ ) contains links to the current page, the next page and the last page for all the venues on the api. The last entry ( _page_) contains information about the number of entries at the current page, the number of entries in general (on all pages) and the total number of pages.
+
+In the following only the relevant information per venue is extracted ftom the nested list:
+```{r}
+dfs <- lapply(content[['_embedded']][['venues']], data.frame, stringsAsFactors = FALSE)
+venue_data = bind_rows(dfs)
+venue_data = venue_data[,c('name', 'name.1', 'postalCode', 'line1', 'url', 'location.longitude', 'location.latitude')]
+venue_data=venue_data %>% rename(
+  city = name.1,
+  address = line1, 
+  longitude = location.longitude,
+  latitude = location.latitude
+)
+glimpse(venue_data)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
