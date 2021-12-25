@@ -57,11 +57,12 @@ content = content(response)
 ```
 The resulting list of three contains all the information for 20 venues obtained from the API. This list of lists contains the information about the venue in the first entry _embedded_ -> _venues_. In each of the 20 entries, one can find the name, city, postalCode, address, url, longitude, latitude and many more. The second entry ( _links_ ) contains links to the current page, the next page and the last page for all the venues on the api. The last entry ( _page_) contains information about the number of entries at the current page, the number of entries in general (on all pages) and the total number of pages.
 
-In the following only the relevant information per venue is extracted ftom the nested list:
+In the following only the relevant information per venue is extracted from the nested list:
 ```{r}
-dfs <- lapply(content[['_embedded']][['venues']], data.frame, stringsAsFactors = FALSE)
-venue_data = bind_rows(dfs)
-venue_data = venue_data[,c('name', 'name.1', 'postalCode', 'line1', 'url', 'location.longitude', 'location.latitude')]
+json_content = content(response, as='text')
+venue_data = data.frame(fromJSON(json_content)[[1]][[1]])
+venue_data = as.data.frame(venue_data[,c('name', 'city', 'postalCode', 'address', 'url', 'location')])
+venue_data = do.call(data.frame, venue_data)
 venue_data=venue_data %>% rename(
   city = name.1,
   address = line1, 
@@ -72,7 +73,66 @@ glimpse(venue_data)
 ```
 
 
+### Advanced Interaction with the API
+```{r}
+content[[3]]
+```
 
+Looking at the content of the above API call, it becomes clear that the results are only the first 20 results of 12568 venues in total, i.e. the first page of 629 pages. The API documentation however also states that a query parameter _size_ can be chosen, such that more than 20 entries per API call can be retrieved. Furthermore, the page can be stated explicitly in the construction of the API endpoint URl such that one can simply loop over the different pages to retrieve all the data.
+
+
+1. In order to construct the loop, one has to find the number of pages for a given page size. This will be the running index in the loop that will be constructed later.
+```{r}
+country_code = 'DE'
+size = 500
+url = paste('https://app.ticketmaster.com/discovery/v2/venues?apikey=', key, '&locale=*&size=',size,'&countryCode=' , country_code, sep='')
+response = GET(url)
+content = content(response)
+total_pages = content[[3]][[3]]
+total_pages
+```
+
+2. Now the loop can be constructed. Data cleaning will happen inside the loop, such that in each iteration, 500 new entries will be appended to the dataframe.
+```{r}
+all_data = data.frame()
+for (page in 0:(total_pages-1)){
+  url = paste('https://app.ticketmaster.com/discovery/v2/venues?apikey=', key, '&locale=*&size=',size,'&page=',page,'&countryCode=' , country_code, sep='')
+  response = GET(url)
+  #parse to json
+  content = content(response)
+  json_content = content(response, as='text')
+  # parse to r-dataframe 
+  venue_data = data.frame(fromJSON(json_content)[[1]][[1]])
+  # subset to columns needed
+  venue_data = as.data.frame(venue_data[,c('name', 'city', 'postalCode', 'address', 'url', 'location')])
+  # collapse nested structure in the location (lat and lon)
+  venue_data = do.call(data.frame, venue_data)
+  # rename columns
+  venue_data= venue_data %>% rename(
+  city = name.1,
+  longitude = location.longitude,
+  latitude = location.latitude
+  )
+  # rename address columns conditionally
+  if ('line1' %in% names(venue_data))
+    venue_data= venue_data %>% rename(
+      address = line1)
+  if ('address.line1' %in% names(venue_data))
+    venue_data= venue_data %>% rename(
+      address = address.line1)
+  # combine all data together
+  all_data = bind_rows(all_data, venue_data)
+  # Add sleep in each iteration such that rate limits are not exceeded
+  Sys.sleep(0.4)
+}
+```
+
+Quick look at the resulting data
+```{r}
+all_data$address.line2 = NULL
+all_data[,c('postalCode', 'longitude', 'latitude')] = sapply(all_data[,c('postalCode', 'longitude', 'latitude')], as.numeric)
+glimpse(all_data)
+```
 
 
 
