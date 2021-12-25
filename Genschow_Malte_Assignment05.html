@@ -220,10 +220,11 @@ url</code></pre>
 <pre class="r"><code>response = GET(url)
 content = content(response)</code></pre>
 <p>The resulting list of three contains all the information for 20 venues obtained from the API. This list of lists contains the information about the venue in the first entry <em>embedded</em> -&gt; <em>venues</em>. In each of the 20 entries, one can find the name, city, postalCode, address, url, longitude, latitude and many more. The second entry ( <em>links</em> ) contains links to the current page, the next page and the last page for all the venues on the api. The last entry ( <em>page</em>) contains information about the number of entries at the current page, the number of entries in general (on all pages) and the total number of pages.</p>
-<p>In the following only the relevant information per venue is extracted ftom the nested list:</p>
-<pre class="r"><code>dfs &lt;- lapply(content[[&#39;_embedded&#39;]][[&#39;venues&#39;]], data.frame, stringsAsFactors = FALSE)
-venue_data = bind_rows(dfs)
-venue_data = venue_data[,c(&#39;name&#39;, &#39;name.1&#39;, &#39;postalCode&#39;, &#39;line1&#39;, &#39;url&#39;, &#39;location.longitude&#39;, &#39;location.latitude&#39;)]
+<p>In the following only the relevant information per venue is extracted from the nested list:</p>
+<pre class="r"><code>json_content = content(response, as=&#39;text&#39;)
+venue_data = data.frame(fromJSON(json_content)[[1]][[1]])
+venue_data = as.data.frame(venue_data[,c(&#39;name&#39;, &#39;city&#39;, &#39;postalCode&#39;, &#39;address&#39;, &#39;url&#39;, &#39;location&#39;)])
+venue_data = do.call(data.frame, venue_data)
 venue_data=venue_data %&gt;% rename(
   city = name.1,
   address = line1, 
@@ -241,6 +242,81 @@ glimpse(venue_data)</code></pre>
 ## $ longitude  &lt;chr&gt; &quot;9.958075&quot;, &quot;13.36896&quot;, &quot;13.67471&quot;, &quot;13.7566&quot;, &quot;12.24645&quot;, ~
 ## $ latitude   &lt;chr&gt; &quot;53.551885&quot;, &quot;52.51007&quot;, &quot;51.06498&quot;, &quot;51.06435&quot;, &quot;51.83364&quot;~</code></pre>
 </div>
+</div>
+<div id="advanced-interaction-with-the-api" class="section level3">
+<h3>Advanced Interaction with the API</h3>
+<pre class="r"><code>content[[3]]</code></pre>
+<pre><code>## $size
+## [1] 20
+## 
+## $totalElements
+## [1] 12568
+## 
+## $totalPages
+## [1] 629
+## 
+## $number
+## [1] 0</code></pre>
+<p>Looking at the content of the above API call, it becomes clear that the results are only the first 20 results of 12568 venues in total, i.e. the first page of 629 pages. The API documentation however also states that a query parameter <em>size</em> can be chosen, such that more than 20 entries per API call can be retrieved. Furthermore, the page can be stated explicitly in the construction of the API endpoint URl such that one can simply loop over the different pages to retrieve all the data.</p>
+<ol style="list-style-type: decimal">
+<li>In order to construct the loop, one has to find the number of pages for a given page size. This will be the running index in the loop that will be constructed later.</li>
+</ol>
+<pre class="r"><code>country_code = &#39;DE&#39;
+size = 500
+url = paste(&#39;https://app.ticketmaster.com/discovery/v2/venues?apikey=&#39;, key, &#39;&amp;locale=*&amp;size=&#39;,size,&#39;&amp;countryCode=&#39; , country_code, sep=&#39;&#39;)
+response = GET(url)
+content = content(response)
+total_pages = content[[3]][[3]]
+total_pages</code></pre>
+<pre><code>## [1] 26</code></pre>
+<ol start="2" style="list-style-type: decimal">
+<li>Now the loop can be constructed. Data cleaning will happen inside the loop, such that in each iteration, 500 new entries will be appended to the dataframe.</li>
+</ol>
+<pre class="r"><code>all_data = data.frame()
+for (page in 0:(total_pages-1)){
+  url = paste(&#39;https://app.ticketmaster.com/discovery/v2/venues?apikey=&#39;, key, &#39;&amp;locale=*&amp;size=&#39;,size,&#39;&amp;page=&#39;,page,&#39;&amp;countryCode=&#39; , country_code, sep=&#39;&#39;)
+  response = GET(url)
+  #parse to json
+  content = content(response)
+  json_content = content(response, as=&#39;text&#39;)
+  # parse to r-dataframe 
+  venue_data = data.frame(fromJSON(json_content)[[1]][[1]])
+  # subset to columns needed
+  venue_data = as.data.frame(venue_data[,c(&#39;name&#39;, &#39;city&#39;, &#39;postalCode&#39;, &#39;address&#39;, &#39;url&#39;, &#39;location&#39;)])
+  # collapse nested structure in the location (lat and lon)
+  venue_data = do.call(data.frame, venue_data)
+  # rename columns
+  venue_data= venue_data %&gt;% rename(
+  city = name.1,
+  longitude = location.longitude,
+  latitude = location.latitude
+  )
+  # rename address columns conditionally
+  if (&#39;line1&#39; %in% names(venue_data))
+    venue_data= venue_data %&gt;% rename(
+      address = line1)
+  if (&#39;address.line1&#39; %in% names(venue_data))
+    venue_data= venue_data %&gt;% rename(
+      address = address.line1)
+  # combine all data together
+  all_data = bind_rows(all_data, venue_data)
+  # Add sleep in each iteration such that rate limits are not exceeded
+  Sys.sleep(0.4)
+}</code></pre>
+<p>Quick look at the resulting data</p>
+<pre class="r"><code>all_data$address.line2 = NULL
+all_data[,c(&#39;postalCode&#39;, &#39;longitude&#39;, &#39;latitude&#39;)] = sapply(all_data[,c(&#39;postalCode&#39;, &#39;longitude&#39;, &#39;latitude&#39;)], as.numeric)</code></pre>
+<pre><code>## Warning in lapply(X = X, FUN = FUN, ...): NAs durch Umwandlung erzeugt</code></pre>
+<pre class="r"><code>glimpse(all_data)</code></pre>
+<pre><code>## Rows: 12,568
+## Columns: 7
+## $ name       &lt;chr&gt; &quot;Gruenspan&quot;, &quot;Philharmonie (Großer Saal)&quot;, &quot;Beatpol&quot;, &quot;Mart~
+## $ city       &lt;chr&gt; &quot;Hamburg&quot;, &quot;Berlin&quot;, &quot;Dresden&quot;, &quot;Dresden&quot;, &quot;Dessau-Roßlau&quot;,~
+## $ postalCode &lt;dbl&gt; 22767, 10785, 1157, 1099, 6844, 80809, NA, 12435, 79108, 76~
+## $ address    &lt;chr&gt; &quot;Grosse Freiheit 58&quot;, &quot;Herbert-von-Karajan-Straße 1&quot;, &quot;Altb~
+## $ url        &lt;chr&gt; &quot;http://www.ticketmaster.de/venue/287155&quot;, &quot;https://www.tic~
+## $ longitude  &lt;dbl&gt; 9.958075, 13.368960, 13.674710, 13.756600, 12.246450, 11.55~
+## $ latitude   &lt;dbl&gt; 53.55188, 52.51007, 51.06498, 51.06435, 51.83364, 48.17543,~</code></pre>
 </div>
 
 

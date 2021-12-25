@@ -41,6 +41,7 @@ source('ticketmaster_secret_key.R')
 library(httr)
 library(jsonlite)
 library(dplyr)
+library(ggplot2)
 ```
 
 ##### Create Endpoint URL 
@@ -132,6 +133,28 @@ Quick look at the resulting data
 all_data$address.line2 = NULL
 all_data[,c('postalCode', 'longitude', 'latitude')] = sapply(all_data[,c('postalCode', 'longitude', 'latitude')], as.numeric)
 glimpse(all_data)
+```
+### Visualizing the extracted data
+```{r}
+# Exclude obvious faulty coordinates
+is.na(all_data['longitude']) <-  all_data['longitude'] < 5.866944 | all_data['longitude'] >15.043611
+is.na(all_data['latitude']) <-  all_data['latitude'] < 47.271679 | all_data['latitude'] >55.0846
+all_data$latitude = ifelse(is.na(all_data$longitude),NA,all_data$latitude)
+all_data$longitude = ifelse(is.na(all_data$latitude),NA,all_data$longitude)
+```
+
+
+```{r}
+# plot the data on a map
+ggplot() +
+  geom_polygon(
+  aes(x = long, y = lat, group = group), data = map_data("world", region = "Germany"),
+    fill = "grey90",color = "black") +
+  theme_void() + coord_quickmap() +
+  labs(title = "Event locations across Germany", caption = "Source: ticketmaster.com") +
+  theme(title = element_text(size=8, face='bold'),
+  plot.caption = element_text(face = "italic"))+
+  geom_point(aes(x=longitude, y=latitude), data=all_data, size=0.4, color='red', na.rm=T)
 ```
 
 
