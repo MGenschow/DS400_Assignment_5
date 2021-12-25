@@ -157,8 +157,78 @@ ggplot() +
   geom_point(aes(x=longitude, y=latitude), data=all_data, size=0.4, color='red', na.rm=T)
 ```
 
+### Repeat the task for Italy
+```{r}
+country_code = 'ES'
+size = 500
+url = paste('https://app.ticketmaster.com/discovery/v2/venues?apikey=', key, '&locale=*&size=',size,'&countryCode=' , country_code, sep='')
+response = GET(url)
+content = content(response)
+total_pages = content[[3]][[3]]
+total_pages
+
+all_data = data.frame()
+for (page in 0:(total_pages-1)){
+  url = paste('https://app.ticketmaster.com/discovery/v2/venues?apikey=', key, '&locale=*&size=',size,'&page=',page,'&countryCode=' , country_code, sep='')
+  response = GET(url)
+  #parse to json
+  content = content(response)
+  json_content = content(response, as='text')
+  # parse to r-dataframe 
+  venue_data = data.frame(fromJSON(json_content)[[1]][[1]])
+  # subset to columns needed
+  venue_data = as.data.frame(venue_data[,c('name', 'city', 'postalCode', 'address', 'url', 'location')])
+  # collapse nested structure in the location (lat and lon)
+  venue_data = do.call(data.frame, venue_data)
+  # rename columns
+  venue_data= venue_data %>% rename(
+  city = name.1,
+  longitude = location.longitude,
+  latitude = location.latitude
+  )
+  # rename address columns conditionally
+  if ('line1' %in% names(venue_data))
+    venue_data= venue_data %>% rename(
+      address = line1)
+  if ('address.line1' %in% names(venue_data))
+    venue_data= venue_data %>% rename(
+      address = address.line1)
+  # combine all data together
+  all_data = bind_rows(all_data, venue_data)
+  # Add sleep in each iteration such that rate limits are not exceeded
+  Sys.sleep(0.4)
+}
+```
+
+Quick look at the resulting data
+```{r}
+all_data$address.line2 = NULL
+all_data[,c('postalCode', 'longitude', 'latitude')] = sapply(all_data[,c('postalCode', 'longitude', 'latitude')], as.numeric)
+glimpse(all_data)
+```
+
+### Visualizing the extracted data
+```{r}
+# Exclude obvious faulty coordinates
+is.na(all_data['longitude']) <-  all_data['longitude'] < -18.15 | all_data['longitude'] >4.316667
+is.na(all_data['latitude']) <-  all_data['latitude'] < 27.633333 | all_data['latitude'] >43.783333
+all_data$latitude = ifelse(is.na(all_data$longitude),NA,all_data$latitude)
+all_data$longitude = ifelse(is.na(all_data$latitude),NA,all_data$longitude)
+```
 
 
+```{r}
+# plot the data on a map
+ggplot() +
+  geom_polygon(
+  aes(x = long, y = lat, group = group), data = map_data("world", region = "Spain"),
+    fill = "grey90",color = "black") +
+  theme_void() + coord_quickmap() +
+  labs(title = "Event locations across Spain", caption = "Source: ticketmaster.com") +
+  theme(title = element_text(size=8, face='bold'),
+  plot.caption = element_text(face = "italic")) +
+  geom_point(aes(x=longitude, y=latitude), data=all_data, size=0.4, color='red', na.rm=T)
+```
 
 
 
