@@ -22,7 +22,7 @@ rm(list = ls())
 ```
 
 ### 1. GitHub
-The code for this assignment can be found in [this repository](https://github.com/MGenschow/DS400_Assignment_5). Note that this is a **private** repository and access has been granted to David Gremminger (username davidgremminger).
+The code for this assignment can be found in [this repository](https://github.com/MGenschow/DS400_Assignment_5).
 
 ### 2. Getting to know the API
 
@@ -79,7 +79,7 @@ glimpse(venue_data)
 content[[3]]
 ```
 
-Looking at the content of the above API call, it becomes clear that the results are only the first 20 results of 12568 venues in total, i.e. the first page of 629 pages. The API documentation however also states that a query parameter _size_ can be chosen, such that more than 20 entries per API call can be retrieved. Furthermore, the page can be stated explicitly in the construction of the API endpoint URl such that one can simply loop over the different pages to retrieve all the data.
+Looking at the content of the above API call, it becomes clear that the results are only the first 20 results of 12568 venues in total, i.e. the first page of 629 pages (when leaving the size at the default, which is 20). The API documentation however also states that a query parameter _size_ can be chosen, such that more than 20 entries per API call can be retrieved. Furthermore, the page can be stated explicitly in the construction of the API endpoint URl such that one can simply loop over the different pages to retrieve all the data.
 
 
 1. In order to construct the loop, one has to find the number of pages for a given page size. This will be the running index in the loop that will be constructed later.
@@ -93,7 +93,7 @@ total_pages = content[[3]][[3]]
 total_pages
 ```
 
-2. Now the loop can be constructed. Data cleaning will happen inside the loop, such that in each iteration, 500 new entries will be appended to the dataframe.
+2. Now the loop can be constructed. Data cleaning will happen inside the loop, such that in each iteration, 500 new entries will be brought into tidy format and appended to the final dataframe.
 ```{r}
 all_data = data.frame()
 for (page in 0:(total_pages-1)){
@@ -157,7 +157,7 @@ ggplot() +
   geom_point(aes(x=longitude, y=latitude), data=all_data, size=0.4, color='red', na.rm=T)
 ```
 
-### Repeat the task for Italy
+### Repeat the task for Spain
 ```{r}
 country_code = 'ES'
 size = 500
@@ -208,6 +208,7 @@ glimpse(all_data)
 ```
 
 ### Visualizing the extracted data
+The extremum coordinates used below can be found [here](https://en.wikipedia.org/wiki/List_of_extreme_points_of_Spain)
 ```{r}
 # Exclude obvious faulty coordinates
 is.na(all_data['longitude']) <-  all_data['longitude'] < -18.15 | all_data['longitude'] >4.316667
